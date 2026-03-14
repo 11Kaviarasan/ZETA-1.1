@@ -1,0 +1,29 @@
+# Zeta AI — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+flask==3.0.3
+flask-cors==4.0.1
+gunicorn==22.0.0
+
+# ── Environment ───────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ── Database ──────────────────────────────────────────────────────────────────
+pymongo[srv]==4.7.3
+bcrypt==4.1.3
+
+# ── AI — Gemini (Primary) ─────────────────────────────────────────────────────
+google-generativeai==0.7.2
+
+# ── AI — OpenAI (Fallback) ────────────────────────────────────────────────────
+openai==1.35.7
+
+# ── Vector Store — Pinecone ───────────────────────────────────────────────────
+pinecone==4.1.0
+
+# ── Deep Fallback — Wikipedia ─────────────────────────────────────────────────
+wikipedia==1.4.0
+
+# ── Payments ──────────────────────────────────────────────────────────────────
+razorpay==1.4.2
