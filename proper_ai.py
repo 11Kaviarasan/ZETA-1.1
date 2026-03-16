@@ -22,6 +22,8 @@ def _get_gemini():
     import google.generativeai as genai
     genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
     model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+    if not model_name.startswith("models/"):
+        model_name = f"models/{model_name}"
     return genai.GenerativeModel(
         model_name=model_name,
         system_instruction=_SYSTEM_PROMPT,
@@ -193,17 +195,31 @@ def _ask_livebrain(question: str) -> Optional[str]:
     try:
         import wikipedia
         wikipedia.set_lang("en")
-        search_results = wikipedia.search(question, results=3)
+        # Clean question for better search
+        search_q = re.sub(r"^(who|what|where|how|solve|calculate)\s+(is|are|was|were|the)\s+", "", question, flags=re.I)
+        search_results = wikipedia.search(search_q, results=3)
         if not search_results:
             return None
         page = wikipedia.page(search_results[0], auto_suggest=False)
-        summary = page.summary[:1500]
-        # Feed summary back through Gemini for a proper answer
-        context_q = f"Based on this information:\n\n{summary}\n\nAnswer this question: {question}"
+        summary = page.summary[:2000]
+        # Feed back through Gemini for a polished response
+        context_q = f"Using this online resource summary, answer the user's question precisely:\n\n{summary}\n\nQuestion: {question}"
         answer = _ask_gemini(context_q, [])
-        return answer or summary
+        return answer or f"The answer is:  {summary}"
     except Exception as e:
         logger.warning(f"LiveBrain error: {e}")
+        return None
+
+def _solve_math_local(question: str) -> Optional[str]:
+    """Fallback local solver for simple expressions if AI is offline."""
+    try:
+        from sympy import sympify, simplify
+        # Remove words to isolate expression
+        expr_str = re.sub(r"[a-zA-Z\?]", "", question).replace("x", "*").strip()
+        if not expr_str: return None
+        result = simplify(sympify(expr_str))
+        return f"Based on local calculation: {result}"
+    except:
         return None
 
 # ─── Language detection ───────────────────────────────────────────────────────
@@ -252,6 +268,21 @@ def query(question: str, history: list, user_id=None, conv_id=None, model_hint: 
         result.update(answer=st, source="small_talk", tokens=_estimate_tokens(st))
         logger.info(f"[small_talk] {round(time.time()-start,2)}s")
         return result
+
+    # 1.5 Proactive Search & Local Math
+    q_lower = question.lower()
+    if result["intent"] == "math":
+        local_res = _solve_math_local(question)
+        if local_res and len(question) < 25:
+             result.update(answer=local_res, source="local_math", tokens=10)
+             return result
+
+    if any(q_lower.startswith(x) for x in ["who is", "what is", "where is", "how many", "tell me about"]):
+         logger.info(f"[proactive_search] Triggering LiveBrain for: {question}")
+         lb = _ask_livebrain(question)
+         if lb:
+             result.update(answer=lb, source="livebrain_proactive", tokens=_estimate_tokens(lb))
+             return result
 
     # 2. Pinecone Cache
     cached = _cache_lookup(question)
